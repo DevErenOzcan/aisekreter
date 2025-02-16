@@ -1,0 +1,34 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice Recorder</title>
+    <link rel="stylesheet" href="{% static 'css/styles.css' %}">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+</head>
+<body>
+<nav class="navbar">
+    <div class="navbar-top">
+        <h1>Discurso</h1>
+    </div>
+    <div class="navbar-bottom">
+        <a href="/" class="nav-link" aria-label="Transkripsiyon bölümüne git">Transcribing</a>
+        <a href="/person_labeling/" class="nav-link" aria-label="Kişi etiketleme bölümüne git">Person Labeling</a>
+    </div>
+</nav>
+<main class="container">
+    <h1>Person Labeling</h1>
+    <label>Speaker Name</label>
+    <input type="text" id="speaker_name" placeholder="Enter a Speaker Name" required>
+    <button class="record-toggle" id="record-toggle">Start Recording</button>
+    <div class="audio-container hidden" id="audio-container">
+        <audio id="audio-playback" controls aria-label="Kayıt oynatıcı"></audio>
+    </div>
+    <p id="status-message"></p>
+</main>
+<script src="{% static 'js/labeling.js' %}"></script>
+</body>
+</html>
