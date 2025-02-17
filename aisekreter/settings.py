@@ -72,8 +72,7 @@ ASGI_APPLICATION = 'aisekreter.asgi.application'
 
 CHANNEL_LAYERS = {
     "default": {
-        "BACKEND": "channels.layers.InMemoryChannelLayer",
-        # Redis kullanıyorsan "channels_redis.core.RedisChannelLayer"
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
         'CONFIG': {
             "hosts": [('127.0.0.1', 6379)],
         },
