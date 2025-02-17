@@ -1,13 +1,12 @@
 import os
 from time import sleep
-from django.http import JsonResponse, HttpResponse
+import librosa
+from django.http import JsonResponse
 from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 from app.models import Meeting
-from pydub import AudioSegment
-from pydub.utils import make_chunks
-from io import BytesIO
-import base64
+from django.conf import settings
+
 
 
 audio_segments = {}
@@ -33,8 +32,12 @@ def start_segmentation(request, id):
             sleep(2)
             while Meeting.objects.get(id=id).is_alive:
                 sleep(3)
-                with open(f"meetings/{id}", 'rb') as f:
-                    audio_file = f.read()
+                inference = settings.DIARIZATION
+                speech_segments = inference({'uri': id, 'audio': f"meetings/{id}"})
+
+                # Segment bilgilerini yazdır
+                for segment in speech_segments:
+                    print(f"Start: {segment.start}, End: {segment.end}")
                 return JsonResponse({'success': True, 'message': "Segmentasyon bitti"})
 
         except Exception as e:
