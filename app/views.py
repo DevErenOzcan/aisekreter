@@ -1,12 +1,16 @@
+import os
 from time import sleep
-
 from django.http import JsonResponse, HttpResponse
 from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 from app.models import Meeting
-from app.consumers import get_audio_buffers
+from pydub import AudioSegment
+from pydub.utils import make_chunks
+from io import BytesIO
+import base64
 
 
+audio_segments = {}
 def home(request):
     return render(request, 'home.html')
 
@@ -21,20 +25,27 @@ def start_meeting(request):
     else:
         return JsonResponse({'success': False, 'error': "method not allowed"})
 
+
 @csrf_exempt
-def start_segmentation(request, id):
+def upload(request, id):
     if request.method == "POST":
         try:
-            sleep(5)
-            while True:
-                if Meeting.objects.get(id=id).is_alive:
-                    buffers = get_audio_buffers(id)
-                    print(buffers)
-                    sleep(3)
-                    #TODO: segmentasyon yap
-                else:
-                    break
-            return JsonResponse({'success': True, 'message': "segmentasyon tamamlandı"})
+            meeting = Meeting.objects.get(id=id)
+            if meeting.is_alive:
+                base64_audio_data = request.body
+                audio_binary = base64.b64decode(base64_audio_data)
+
+                directory = f"meetings/meeting_{id}"
+                os.makedirs(directory, exist_ok=True)
+                with open(f"{directory}/chunk_{meeting.chunk_count}.wav", "wb") as f:
+                    f.write(audio_binary)
+                meeting.chunk_count += 1
+                meeting.save()
+
+                return JsonResponse({'success': True, 'message': "Ses kaydedildi ve segment eklendi"})
+            else:
+                return JsonResponse({'success': False, 'message': "Toplantı kapalı, ses işlenmedi"})
+
         except Exception as e:
             return JsonResponse({'success': False, 'error': str(e)})
     else:

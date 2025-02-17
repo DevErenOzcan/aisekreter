@@ -5,8 +5,6 @@ document.addEventListener("DOMContentLoaded", function () {
 
     let isRecording = false;
     let meetingId = null; // Used to store the meeting ID
-
-    let ws;
     let mediaRecorder;
 
     recordToggle.addEventListener("click", function () {
@@ -22,25 +20,26 @@ document.addEventListener("DOMContentLoaded", function () {
             success: function (response) {
                 if (response.success) {
                     meetingId = response.id;
-                    isRecording = true;
-                    record_audio();
+                    statusMessage.textContent = "Recording...";
+                    navigator.mediaDevices.getUserMedia({audio: true})
+                        .then(stream => {
+                            mediaRecorder = new MediaRecorder(stream);
+                            mediaRecorder.start(5000); // Her 5 saniyede bir veri kaydet
+                            isRecording = true;
+
+                            mediaRecorder.ondataavailable = event => {
+                                if (event.data.size > 0) {
+                                    sendAudio(event.data); // Anında gönder
+                                }
+                            };
+                        })
+                        .catch(error => console.error("Mikrofona erişim hatası:", error));
                 } else {
-                    console.error("Meeting başlatılamadı:", response.error);
+                    console.error("Meeting could not be started:", response.error);
                 }
-                $.ajax({
-                    url: '/meeting/start_segmentation/' + meetingId + '/',
-                    type: 'POST',
-                    dataType: 'json',
-                    success: function (response) {
-                        console.log('Audio sent successfully');
-                    },
-                    error: function (error) {
-                        console.error('Error sending audio:', error);
-                    }
-                });
             },
             error: function (xhr, status, error) {
-                console.error("Hata: ", error);
+                console.error("Error: ", error);
             }
         });
     }
@@ -58,36 +57,40 @@ document.addEventListener("DOMContentLoaded", function () {
                 }
                 if (response.success) {
                     showLoadingSpinner();
-                    // Optionally hide the spinner once processing is done
                 } else {
-                    console.error("Hata:", response.error);
+                    console.error("Error:", response.error);
                 }
             },
             error: function (xhr, status, error) {
-                console.error("Hata: ", error);
+                console.error("Error: ", error);
             }
         });
     }
 
-    function record_audio() {
-        navigator.mediaDevices.getUserMedia({audio: true})
-            .then(stream => {
-                mediaRecorder = new MediaRecorder(stream);
-                mediaRecorder.start(1000); // 1 saniyelik parçalar halinde kaydet
-
-                mediaRecorder.ondataavailable = event => {
-                    if (ws && ws.readyState === WebSocket.OPEN) {
-                        ws.send(event.data);
-                    }
-                };
-
-            })
-            .catch(error => console.error("Mikrofona erişim hatası:", error));
+    function sendAudio(audioBlob) {
+        let reader = new FileReader();
+        reader.readAsDataURL(audioBlob);
+        reader.onloadend = function () {
+            let base64Audio = reader.result.split(',')[1];
+            $.ajax({
+                url: `/meeting/upload/${meetingId}/`,
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({audio: base64Audio}),
+                success: function (response) {
+                    console.log("Ses başarıyla yüklendi:", response);
+                },
+                error: function (xhr, status, error) {
+                    console.error("Ses yükleme hatası:", error);
+                }
+            });
+        };
     }
+
 
     function toggleRecordingState() {
         recordToggle.classList.toggle("recording");
-        recordToggle.textContent = isRecording ? "Start Recording" : "Stop Recording";
+        recordToggle.textContent = isRecording ? "Stop Recording" : "Start Recording";
     }
 
     function showLoadingSpinner() {
@@ -98,28 +101,5 @@ document.addEventListener("DOMContentLoaded", function () {
     function hideLoadingSpinner() {
         loadingSpinner.style.display = "none";
         recordToggle.style.display = "block";
-    }
-
-    function displayTranscriptionResults(data) {
-        statusMessage.textContent = "Transcription Complete";
-
-        if (data.speaker_segments) {
-            data.speaker_segments.forEach(segment => {
-                const segmentCard = document.createElement("div");
-                segmentCard.classList.add("segment-card");
-
-                const speakerInfo = document.createElement("h3");
-                speakerInfo.classList.add("segment-speaker");
-                speakerInfo.textContent = `${segment.speaker}: ${segment.score}`;
-                segmentCard.appendChild(speakerInfo);
-
-                const textParagraph = document.createElement("p");
-                textParagraph.classList.add("segment-text");
-                textParagraph.textContent = segment.text;
-                segmentCard.appendChild(textParagraph);
-
-                statusMessage.appendChild(segmentCard);
-            });
-        }
     }
 });

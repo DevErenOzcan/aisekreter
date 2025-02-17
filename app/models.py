@@ -5,6 +5,7 @@ class Meeting(models.Model):
     duration = models.IntegerField(null=True, blank=True)
     speaker_count = models.IntegerField(null=True, blank=True)
     is_alive = models.BooleanField(default=True)
+    chunk_count = models.IntegerField(default=0, null=True, blank=True)
 
 
 class Speaker(models.Model):
