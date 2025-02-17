@@ -1,10 +1,11 @@
 import aiofiles
 from channels.generic.websocket import AsyncWebsocketConsumer
+from pydub import AudioSegment
 
 class AudioConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         self.meeting_id = self.scope['url_route']['kwargs']['meeting_id']
-        self.filename = f"meeting_{self.meeting_id}.webm"  # Geçici WebM dosyası
+        self.filename = f"meetings/{self.meeting_id}.wav"  # Geçici WebM dosyası
         self.file = await aiofiles.open(self.filename, 'wb')  # Asenkron dosya açma
         await self.accept()
 

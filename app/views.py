@@ -27,24 +27,15 @@ def start_meeting(request):
 
 
 @csrf_exempt
-def upload(request, id):
+def start_segmentation(request, id):
     if request.method == "POST":
         try:
-            meeting = Meeting.objects.get(id=id)
-            if meeting.is_alive:
-                base64_audio_data = request.body
-                audio_binary = base64.b64decode(base64_audio_data)
-
-                directory = f"meetings/meeting_{id}"
-                os.makedirs(directory, exist_ok=True)
-                with open(f"{directory}/chunk_{meeting.chunk_count}.wav", "wb") as f:
-                    f.write(audio_binary)
-                meeting.chunk_count += 1
-                meeting.save()
-
-                return JsonResponse({'success': True, 'message': "Ses kaydedildi ve segment eklendi"})
-            else:
-                return JsonResponse({'success': False, 'message': "Toplantı kapalı, ses işlenmedi"})
+            sleep(2)
+            while Meeting.objects.get(id=id).is_alive:
+                sleep(3)
+                with open(f"meetings/{id}", 'rb') as f:
+                    audio_file = f.read()
+                return JsonResponse({'success': True, 'message': "Segmentasyon bitti"})
 
         except Exception as e:
             return JsonResponse({'success': False, 'error': str(e)})

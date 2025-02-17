@@ -35,6 +35,17 @@ document.addEventListener("DOMContentLoaded", function () {
 
                             ws.onopen = function () {
                                 console.log("WebSocket bağlantısı açıldı.");
+                                $.ajax({
+                                    url: `/meeting/start_segmentation/${meetingId}/`,
+                                    type: 'POST',
+                                    dataType: 'json',
+                                    success: function (response) {
+                                        console.log("segmentasyon bitti")
+                                    },
+                                    error: function (xhr, status, error) {
+                                        console.error("Hata:", error);
+                                    }
+                                });
                                 mediaRecorder.start(1000); // Her 1 saniyede bir veri gönder
                             };
 
@@ -44,7 +55,8 @@ document.addEventListener("DOMContentLoaded", function () {
 
                             mediaRecorder.ondataavailable = function (event) {
                                 if (event.data.size > 0 && ws.readyState === WebSocket.OPEN) {
-                                    ws.send(event.data);
+                                    const audioBlob = new Blob([event.data], {type: "audio/wav"});
+                                    ws.send(audioBlob);
                                 }
                             };
 
