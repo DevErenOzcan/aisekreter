@@ -31,7 +31,7 @@ document.addEventListener("DOMContentLoaded", function () {
                     navigator.mediaDevices.getUserMedia({audio: true})
                         .then(stream => {
                             mediaRecorder = new MediaRecorder(stream, {mimeType: 'audio/webm'});
-                            const ws = new WebSocket('ws://127.0.0.1:8080/ws/audio-stream/');
+                            const ws = new WebSocket(`ws://127.0.0.1:8080/meeting/${meetingId}/`);
 
                             ws.onopen = function () {
                                 console.log("WebSocket bağlantısı açıldı.");
