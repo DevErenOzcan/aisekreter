@@ -5,6 +5,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     let isRecording = false;
     let meetingId = null; // Kullanıcı toplantı ID'sini burada saklar.
+    let mediaRecorder = null
 
     // Kayıt butonuna tıklama olayını dinle
     recordToggle.addEventListener("click", function () {
@@ -16,7 +17,6 @@ document.addEventListener("DOMContentLoaded", function () {
         toggleRecordingState();
     });
 
-    // Toplantıyı başlatan fonksiyon
     function startMeeting() {
         $.ajax({
             url: '/meeting/start/',
@@ -30,61 +30,42 @@ document.addEventListener("DOMContentLoaded", function () {
 
                     navigator.mediaDevices.getUserMedia({audio: true})
                         .then(stream => {
-                            const audioTrack = stream.getAudioTracks()[0];
-                            const peerConnection = new RTCPeerConnection();
-                            peerConnection.addTrack(audioTrack, stream);
-
+                            mediaRecorder = new MediaRecorder(stream, {mimeType: 'audio/webm'});
                             const ws = new WebSocket('ws://127.0.0.1:8080/ws/audio-stream/');
 
                             ws.onopen = function () {
                                 console.log("WebSocket bağlantısı açıldı.");
-                                startSendingAudio();
+                                mediaRecorder.start(1000); // Her 1 saniyede bir veri gönder
                             };
 
                             ws.onerror = function (error) {
                                 console.error("WebSocket hatası:", error);
                             };
 
-                            function startSendingAudio() {
-                                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                                const analyser = audioContext.createAnalyser();
-                                const source = audioContext.createMediaStreamSource(stream);
-                                source.connect(analyser);
+                            mediaRecorder.ondataavailable = function (event) {
+                                if (event.data.size > 0 && ws.readyState === WebSocket.OPEN) {
+                                    ws.send(event.data);
+                                }
+                            };
 
-                                const bufferLength = analyser.frequencyBinCount;
-                                const dataArray = new Uint8Array(bufferLength);
-
-                                let intervalId = setInterval(() => {
-                                    if (isRecording) {
-                                        if (ws.readyState === WebSocket.OPEN) {
-                                            analyser.getByteFrequencyData(dataArray);
-                                            ws.send(dataArray.buffer); // Send audio data
-                                        } else {
-                                            console.log("veri gönderilemedi");
-                                        }
-                                    } else {
-                                        clearInterval(intervalId); // Interval'ı temizler
-                                        ws.close()
-                                        console.log("Recording stopped, interval cleared.");
-                                    }
-                                }, 5000);
-
-                            }
+                            mediaRecorder.onstop = function () {
+                                console.log("Kayıt durduruldu.");
+                                ws.close();
+                            };
                         })
                         .catch(error => {
-                            console.error("Web scoket bağlantısı açılırken hata oluştu", error);
+                            console.error("Mikrofon erişim hatası:", error);
                         });
                 } else {
-                    console.error("Toplantı başlatılırken bir hata oluştu:", response.error);
+                    console.error("Toplantı başlatılırken hata oluştu:", response.error);
                 }
             },
             error: function (xhr, status, error) {
-                console.error("Hata: ", error);
+                console.error("Hata:", error);
             }
         });
     }
 
-    // Toplantıyı durduran fonksiyon
     function stopMeeting() {
         $.ajax({
             url: `/meeting/stop/${meetingId}/`,
@@ -93,15 +74,19 @@ document.addEventListener("DOMContentLoaded", function () {
             success: function (response) {
                 isRecording = false;
                 statusMessage.textContent = "Recording stopped. Processing audio...";
+
+                if (mediaRecorder && mediaRecorder.state !== "inactive") {
+                    mediaRecorder.stop();
+                }
+
                 if (response.success) {
                     showLoadingSpinner();
-                    console.log("Kayıt durduruldu.");
                 } else {
                     console.error("Hata:", response.error);
                 }
             },
             error: function (xhr, status, error) {
-                console.error("Hata: ", error);
+                console.error("Hata:", error);
             }
         });
     }
