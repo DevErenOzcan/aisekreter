@@ -54,20 +54,21 @@ document.addEventListener("DOMContentLoaded", function () {
                                 const bufferLength = analyser.frequencyBinCount;
                                 const dataArray = new Uint8Array(bufferLength);
 
-                                function sendAudioData() {
-                                    if (ws.readyState === WebSocket.OPEN) {
-                                        analyser.getByteFrequencyData(dataArray);
-                                        ws.send(dataArray.buffer); // Send audio data
-                                    }
-
+                                let intervalId = setInterval(() => {
                                     if (isRecording) {
-                                        setTimeout(sendAudioData, 1000);
+                                        if (ws.readyState === WebSocket.OPEN) {
+                                            analyser.getByteFrequencyData(dataArray);
+                                            ws.send(dataArray.buffer); // Send audio data
+                                        } else {
+                                            console.log("veri gönderilemedi");
+                                        }
                                     } else {
-                                        ws.close();
+                                        clearInterval(intervalId); // Interval'ı temizler
+                                        ws.close()
+                                        console.log("Recording stopped, interval cleared.");
                                     }
-                                }
+                                }, 5000);
 
-                                sendAudioData();
                             }
                         })
                         .catch(error => {

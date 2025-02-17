@@ -1,31 +1,23 @@
+import wave
 from channels.generic.websocket import AsyncWebsocketConsumer
-import json
 
-class AudioStreamConsumer(AsyncWebsocketConsumer):
+class AudioConsumer(AsyncWebsocketConsumer):
     async def connect(self):
-        self.room_group_name = 'audio_room'
+        self.audio_data = b""  # Gelen veriyi saklamak için buffer
         await self.accept()
 
-    async def disconnect(self, close_code):
-        pass  # You can handle cleanup here
-
     async def receive(self, text_data=None, bytes_data=None):
-        if text_data:
-            # Handle text messages (if needed)
-            data = json.loads(text_data)
-            await self.send(text_data=json.dumps({
-                'message': 'Text data received'
-            }))
-
         if bytes_data:
-            # Handle binary (audio) data
-            print("Received binary audio data:", len(bytes_data), "bytes")
+            self.audio_data += bytes_data  # Gelen veriyi biriktir
 
-            # Process or save the received audio data (optional)
-            # Example: Save to a file
-            # with open("received_audio.raw", "ab") as f:
-            #     f.write(bytes_data)
+    async def disconnect(self, close_code):
+        # Bağlantı kapandığında dosyaya kaydet
+        if self.audio_data:
+            self.save_audio(self.audio_data, "recorded_audio.wav")
 
-            await self.send(text_data=json.dumps({
-                'message': 'Binary audio data received'
-            }))
+    def save_audio(self, binary_data, filename):
+        with wave.open(filename, 'wb') as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(16000)
+            wf.writeframes(binary_data)
