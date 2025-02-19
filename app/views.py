@@ -32,12 +32,7 @@ def start_segmentation(request, id):
             sleep(2)
             while Meeting.objects.get(id=id).is_alive:
                 sleep(3)
-                inference = settings.DIARIZATION
-                speech_segments = inference({'uri': id, 'audio': f"meetings/{id}"})
 
-                # Segment bilgilerini yazdır
-                for segment in speech_segments:
-                    print(f"Start: {segment.start}, End: {segment.end}")
                 return JsonResponse({'success': True, 'message': "Segmentasyon bitti"})
 
         except Exception as e:

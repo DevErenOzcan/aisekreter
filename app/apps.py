@@ -1,7 +1,7 @@
 import joblib
 from django.apps import AppConfig
 from django.conf import settings
-from pyannote.audio import Model, Inference
+from pyannote.audio import Model, Inference, Pipeline
 
 
 class AppConfig(AppConfig):
@@ -9,4 +9,6 @@ class AppConfig(AppConfig):
     name = 'app'
 
     def ready(self):
-        settings.DIARIZATION = Inference("pyannote/speaker-diarization", device="cuda")
+        settings.DIARIZATION = Pipeline.from_pretrained(
+            "pyannote/speaker-diarization-3.1",
+            use_auth_token="<hf_token>")

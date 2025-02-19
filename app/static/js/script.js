@@ -5,7 +5,9 @@ document.addEventListener("DOMContentLoaded", function () {
 
     let isRecording = false;
     let meetingId = null; // Kullanıcı toplantı ID'sini burada saklar.
-    let mediaRecorder = null
+    let audioContext = null;
+    let recorder = null;
+    let intervalId;
 
     // Kayıt butonuna tıklama olayını dinle
     recordToggle.addEventListener("click", function () {
@@ -30,7 +32,10 @@ document.addEventListener("DOMContentLoaded", function () {
 
                     navigator.mediaDevices.getUserMedia({audio: true})
                         .then(stream => {
-                            mediaRecorder = new MediaRecorder(stream, {mimeType: 'audio/webm'});
+                            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                            const input = audioContext.createMediaStreamSource(stream);
+                            recorder = new Recorder(input, {numChannels: 1});
+
                             const ws = new WebSocket(`ws://127.0.0.1:8080/meeting/${meetingId}/`);
 
                             ws.onopen = function () {
@@ -40,30 +45,33 @@ document.addEventListener("DOMContentLoaded", function () {
                                     type: 'POST',
                                     dataType: 'json',
                                     success: function (response) {
-                                        console.log("segmentasyon bitti")
+                                        console.log("segmentasyon bitti");
                                     },
                                     error: function (xhr, status, error) {
                                         console.error("Hata:", error);
                                     }
                                 });
-                                mediaRecorder.start(1000); // Her 1 saniyede bir veri gönder
+                                recorder.record(); // Kayıt başlat
                             };
 
                             ws.onerror = function (error) {
                                 console.error("WebSocket hatası:", error);
                             };
 
-                            mediaRecorder.ondataavailable = function (event) {
-                                if (event.data.size > 0 && ws.readyState === WebSocket.OPEN) {
-                                    const audioBlob = new Blob([event.data], {type: "audio/wav"});
-                                    ws.send(audioBlob);
-                                }
-                            };
-
-                            mediaRecorder.onstop = function () {
-                                console.log("Kayıt durduruldu.");
-                                ws.close();
-                            };
+                            // Kayıt verilerini gönder
+                            intervalId = setInterval(() => {
+                                recorder.exportWAV(blob => {
+                                    if (!isRecording) {
+                                        clearInterval(intervalId); // Kayıt durduğunda interval'i durdur
+                                        ws.close()
+                                        return; // Kayıt durduysa daha fazla işlem yapma
+                                    }
+                                    if (ws.readyState === WebSocket.OPEN) {
+                                        ws.send(blob);
+                                    }
+                                    recorder.clear(); // Kayıt verilerini temizle
+                                });
+                            }, 1000); // Her 1 saniyede bir veri gönder
                         })
                         .catch(error => {
                             console.error("Mikrofon erişim hatası:", error);
@@ -87,9 +95,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 isRecording = false;
                 statusMessage.textContent = "Recording stopped. Processing audio...";
 
-                if (mediaRecorder && mediaRecorder.state !== "inactive") {
-                    mediaRecorder.stop();
-                }
+                recorder.stop();
 
                 if (response.success) {
                     showLoadingSpinner();
