@@ -69,9 +69,9 @@ document.addEventListener("DOMContentLoaded", function () {
                                     if (ws.readyState === WebSocket.OPEN) {
                                         ws.send(blob);
                                     }
-                                    recorder.clear(); // Kayıt verilerini temizle
+                                    recorder.clear();
                                 });
-                            }, 1000); // Her 1 saniyede bir veri gönder
+                            }, 5000);
                         })
                         .catch(error => {
                             console.error("Mikrofon erişim hatası:", error);

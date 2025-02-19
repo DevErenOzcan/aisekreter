@@ -1,20 +1,19 @@
-import asyncio
-import aiofiles
-import aiofiles.os
 import os
+import io
 from channels.generic.websocket import AsyncWebsocketConsumer
-from pydub import AudioSegment
 from django.conf import settings
-from sqlalchemy import Nullable
+import aiofiles
+import wave
+import numpy as np
 
 
 class AudioConsumer(AsyncWebsocketConsumer):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.meeting_id = None
-        self.buffer = bytearray()  # Bellekte ses verisini tutan buffer
-        self.chunk_count = 0
+        self.segment_count = 0
         self.header = None
+        self.data = bytearray()
 
     async def connect(self):
         self.meeting_id = self.scope['url_route']['kwargs']['meeting_id']
@@ -22,21 +21,37 @@ class AudioConsumer(AsyncWebsocketConsumer):
 
     async def receive(self, text_data=None, bytes_data=None):
         if bytes_data:
-            self.buffer.extend(bytes_data)
-            print(bytes_data)
-            # print(f"Received {len(bytes_data)} bytes, buffer size: {len(self.buffer)}")
-            #
-            # webm_filename = f"meetings/{self.meeting_id}/{self.chunk_count}.webm"
-            wav_filename = f"meetings/{self.meeting_id}/{self.chunk_count}.wav"
+            if self.header is None:
+                self.header = bytes_data[:44]
+                print("header received")
+                self.data = bytes_data[44:]
 
-            await self.save_audio(wav_filename, bytes_data)
-            self.chunk_count += 1
+            else:
+                self.data += bytes_data
+            print("-" * 100)
+            print(f"Received {len(bytes_data)} bytes")
+            await self.process_audio()
 
-            # await self.convert_to_wav(webm_filename, wav_filename)
+    async def process_audio(self):
+        audio_data = self.header + bytes(self.data)
+        audio_file = io.BytesIO(audio_data)
+        diarization_result = settings.DIARIZATION_MODEL(
+            {'audio': audio_file, 'uri': f"meeting_{self.meeting_id}{self.segment_count}"})
 
-            # await aiofiles.os.remove(webm_filename)
+        segments = list(diarization_result.itertracks(yield_label=True))
+        for i, (segment, seg_char, speaker) in enumerate(segments):
+            # sample rate 48.000 her sample başına düşen byte sayısı 2
+            start_byte = int(segment.start * 48000 * 2)
+            end_byte = int(segment.end * 48000 * 2)
+            segment_data = self.data[start_byte:end_byte]
+            print(f"{i}.segment size: {len(segment_data)} bytes")
 
-            # print(f"{wav_filename} saved.")
+            # segment 0.3 saniyeden büyükse ve son segment değilse işleme sokuyorum
+            if len(segment_data) > 30000 and i != len(segments) - 1:
+                await self.save_audio(f"meetings/{self.meeting_id}/{self.segment_count}.wav", self.header + segment_data)
+                self.data = self.data[end_byte:]
+                self.segment_count += 1
+                print(f"meetings/{self.meeting_id}/{self.segment_count}.wav saved")
 
     async def save_audio(self, filename, data):
         directory = os.path.dirname(filename)
@@ -45,15 +60,6 @@ class AudioConsumer(AsyncWebsocketConsumer):
 
         async with aiofiles.open(filename, 'ab') as temp_file:
             await temp_file.write(data)
-
-    async def convert_to_wav(self, input_file, output_file):
-        # Pydub ile audio dosyasını WAV formatına dönüştürme
-        try:
-            audio = AudioSegment.from_file(input_file, format="webm")
-            audio = audio.set_frame_rate(48000).set_channels(1)
-            audio.export(output_file, format="wav")
-        except Exception as e:
-            print(f"Error converting {input_file} to WAV: {e}")
 
     async def disconnect(self, close_code):
         print("Connection closed.")
