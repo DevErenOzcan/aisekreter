@@ -8,35 +8,32 @@
     <title>Discurso | Ses Kaydedici</title>
     <link rel="stylesheet" href="{% static 'css/styles.css' %}">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <script src="https://cdn.rawgit.com/mattdiamond/Recorderjs/master/dist/recorder.js"></script>
-
-
+    <script src="{% static 'js/lib/recorder.js' %}"></script>
 </head>
+
 <body>
-<nav class="navbar">
-    <div class="navbar-top">
-        <h1>Discurso</h1>
-    </div>
-    <div class="navbar-bottom">
-        <a href="/" class="nav-link" aria-label="Transkripsiyon bölümüne git">Transcribing</a>
-        <a href="/person_labeling/" class="nav-link" aria-label="Kişi etiketleme bölümüne git">Person Labeling</a>
-    </div>
-</nav>
+    <nav class="navbar">
+        <div class="navbar-top">
+            <h1>Discurso</h1>
+        </div>
+        <div class="navbar-bottom">
+            <a href="/" class="nav-link" aria-label="Transkripsiyon bölümüne git">Transcribing</a>
+            <a href="/person_labeling/" class="nav-link" aria-label="Kişi etiketleme bölümüne git">Person Labeling</a>
+        </div>
+    </nav>
 
-<main class="container">
-    <h1>Transcribing</h1>
-    <button id="record-toggle" type="button" aria-label="Ses kaydını başlat veya durdur">Start Recording</button>
-    <div class="loading-spinner" id="loading-spinner" style="display: none;"></div>
-    <div class="audio-container hidden" id="audio-container">
-        <audio id="audio-playback" controls aria-label="Kayıt oynatıcı"></audio>
-    </div>
+    <main class="container">
+        <h1>Transcribing</h1>
+        <button id="record-toggle" type="button" aria-label="Ses kaydını başlat veya durdur">Start Recording</button>
+        <div class="loading-spinner" id="loading-spinner" style="display: none;"></div>
+        <div class="audio-container hidden" id="audio-container">
+            <audio id="audio-playback" controls aria-label="Kayıt oynatıcı"></audio>
+        </div>
 
-    <div id="status-message" aria-live="polite"></div>
+        <div id="status-message" aria-live="polite"></div>
+    </main>
 
-</main>
-
-<script src="{% static 'js/script.js' %}"></script>
-<script src="{% static 'js/cdn/jquery-3.6.0.min.js' %}"></script>
-
+    <script src="{% static 'js/script.js' %}"></script>
+    <script src="{% static 'js/cdn/jquery-3.6.0.min.js' %}"></script>
 </body>
 </html>
