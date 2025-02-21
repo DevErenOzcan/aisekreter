@@ -41,7 +41,7 @@ document.addEventListener("DOMContentLoaded", function () {
                             ws.onopen = function () {
                                 console.log("WebSocket bağlantısı açıldı.");
                                 $.ajax({
-                                    url: `/meeting/start_segmentation/${meetingId}/`,
+                                    url: `/meeting/start_processes/${meetingId}/`,
                                     type: 'POST',
                                     dataType: 'json',
                                     success: function (response) {
@@ -71,7 +71,7 @@ document.addEventListener("DOMContentLoaded", function () {
                                     }
                                     recorder.clear();
                                 });
-                            }, 5000);
+                            }, 10000);
                         })
                         .catch(error => {
                             console.error("Mikrofon erişim hatası:", error);

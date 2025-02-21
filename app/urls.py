@@ -8,7 +8,7 @@ urlpatterns = [
         include(
             [
                 path("start/", views.start_meeting, name="start_meeting"),
-                path("start_segmentation/<int:id>/", views.start_segmentation, name="start_segmentation"),
+                path("start_processes/<int:id>/", views.start_processes, name="start_process"),
                 path("stop/<int:id>/", views.stop_meeting, name="stop_meeting"),
                 path("results/<int:id>/", views.get_results, name="get_results"),
             ]
