@@ -71,7 +71,7 @@ document.addEventListener("DOMContentLoaded", function () {
                                     }
                                     recorder.clear();
                                 });
-                            }, 10000);
+                            }, 1000);
                         })
                         .catch(error => {
                             console.error("Mikrofon erişim hatası:", error);
