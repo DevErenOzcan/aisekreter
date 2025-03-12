@@ -1,7 +1,7 @@
-import joblib
 from django.apps import AppConfig
 from django.conf import settings
-from pyannote.audio import Model, Inference, Pipeline
+from joblib import load
+from tensorflow.keras.models import load_model
 
 
 class AppConfig(AppConfig):
@@ -9,6 +9,5 @@ class AppConfig(AppConfig):
     name = 'app'
 
     def ready(self):
-        settings.DIARIZATION = Pipeline.from_pretrained(
-            "pyannote/speaker-diarization-3.1",
-            use_auth_token="<hf_token>")
+        settings.SCALER = load('app/models/scaler.pkl')
+        settings.BEST_KERAS = load_model('app/models/best_model.keras')

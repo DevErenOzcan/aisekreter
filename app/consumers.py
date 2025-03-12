@@ -8,6 +8,13 @@ from django.conf import settings
 import aiofiles
 from pydub import AudioSegment
 import torchaudio
+import librosa
+import numpy as np
+import pandas as pd
+
+import pickle
+
+
 
 # VAD nesnesini oluşturup modunu ayarlıyorum
 vad = webrtcvad.Vad()
@@ -16,6 +23,7 @@ vad.set_mode(2)  # 0 ile 3 arasında bir değer
 sr = 48000
 frame_duration = 20  # ms
 frame_size = int(sr * frame_duration / 1000)
+
 
 
 class AudioConsumer(AsyncWebsocketConsumer):
@@ -67,6 +75,8 @@ class AudioConsumer(AsyncWebsocketConsumer):
                                 print("-" * 100)
                                 print(f"new segment saved: {len(self.current_segment) / (sr * 2)} sn")
 
+                                await process_audio(self.current_segment)
+
                                 # mevcut segmenti temizleyip yeni segmentin başına kalan yarısını ekliyorum. Böylece ses parçaları arasında kesinti olmuyor
                                 self.current_segment = bytearray()
                                 self.current_segment = not_speech_buffer
@@ -98,3 +108,105 @@ class AudioConsumer(AsyncWebsocketConsumer):
         print("-" * 100)
         print(f"new segment saved: {len(self.current_segment) / (sr * 2)} sn")
         print("Connection closed.")
+
+
+async def extract_features(wav_file):
+    try:
+        audio, sample_rate = librosa.load(wav_file, sr=sr)
+
+        zero_crossing = np.mean(librosa.feature.zero_crossing_rate(y=audio).T, axis=0)
+        spectral_centroid = np.mean(librosa.feature.spectral_centroid(y=audio, sr=sample_rate).T, axis=0)
+        spectral_rolloff = np.mean(librosa.feature.spectral_rolloff(y=audio, sr=sample_rate).T, axis=0)
+        spectral_bandwidth = np.mean(librosa.feature.spectral_bandwidth(y=audio, sr=sample_rate).T, axis=0)
+        spectral_contrast = librosa.feature.spectral_contrast(y=audio, sr=sample_rate)
+        contrast_mean = np.mean(spectral_contrast, axis=1)
+        contrast_std = np.std(spectral_contrast, axis=1)
+
+        chroma_stft = librosa.feature.chroma_stft(y=audio, sr=sample_rate)
+        chroma_stft_mean = np.mean(chroma_stft, axis=1)
+        chroma_stft_std = np.std(chroma_stft, axis=1)
+
+        rms_mean = np.mean(librosa.feature.rms(y=audio))
+
+        mel_spectrogram = librosa.feature.melspectrogram(y=audio, sr=sample_rate)
+        melspectrogram_mean = np.mean(mel_spectrogram)
+        melspectrogram_std = np.std(mel_spectrogram)
+
+        flatness_mean = np.mean(librosa.feature.spectral_flatness(y=audio))
+
+        poly_features = librosa.feature.poly_features(y=audio, sr=sample_rate, order=1)
+        poly_mean = np.mean(poly_features, axis=1)
+
+        mfcc = librosa.feature.mfcc(y=audio, sr=sample_rate, n_mfcc=40)
+        mfcc_mean = np.mean(mfcc, axis=1)
+        mfcc_std = np.std(mfcc, axis=1)
+
+        energy = np.sum(audio ** 2)
+
+        features = np.hstack([
+            zero_crossing, spectral_centroid, spectral_rolloff, spectral_bandwidth,
+            contrast_mean, contrast_std, chroma_stft_mean, chroma_stft_std,
+            rms_mean, melspectrogram_mean, melspectrogram_std, flatness_mean,
+            poly_mean, mfcc_mean, mfcc_std, energy
+        ])
+
+        return features
+
+    except Exception as e:
+        return e
+
+
+async def process_audio(data):
+    with io.BytesIO(data) as wav_file:
+        wav_file.seek(0)
+
+    features = await extract_features(wav_file)
+
+    if isinstance(features, Exception):
+        print("Feature extraction error:", features)
+        return
+
+    columns = (
+            ['zero_crossing', 'centroid_mean', 'rolloff_mean', 'bandwidth_mean'] +
+            [f'contrast_mean_{i}' for i in range(7)] +
+            [f'contrast_std_{i}' for i in range(7)] +
+            [f'chroma_stft_mean_{i}' for i in range(12)] +
+            [f'chroma_stft_std_{i}' for i in range(12)] +
+            ['rms_mean', 'melspectrogram_mean', 'melspectrogram_std', 'flatness_mean'] +
+            [f'poly_mean_{i}' for i in range(2)] +
+            [f'mfcc_mean_{i}' for i in range(40)] +
+            [f'mfcc_std_{i}' for i in range(40)] +
+            ['energy']
+    )
+
+    df = pd.DataFrame([features], columns=columns)
+
+
+    # Özellikleri ayır
+    new_features = df.values
+
+    # Scaler'ı yükle
+    scaler = settings.SCALER
+
+    # Veriyi scaler ile ölçeklendir
+    new_features_scaled = scaler.transform(new_features)
+
+    # CNN modeline uygun shaping işlemi
+    new_features_scaled = new_features_scaled.reshape(new_features_scaled.shape[0], new_features_scaled.shape[1], 1)
+
+    # Eğitilmiş en iyi modeli yükle
+    best_model = settings.BEST_KERAS
+
+    # Tahminleri elde et
+    predictions = best_model.predict(new_features_scaled)
+
+    # Tahminleri orijinal etikete dönüştürmek için LabelEncoder'ı yükle
+    with open('label_encoder.pkl', 'rb') as file:
+        label_encoder = pickle.load(file)
+
+    # Tahmin edilen sınıfları al
+    predicted_classes = np.argmax(predictions, axis=1)
+    predicted_labels = label_encoder.inverse_transform(predicted_classes)
+
+    # Sonuçları yazdır
+    print(predicted_labels)
