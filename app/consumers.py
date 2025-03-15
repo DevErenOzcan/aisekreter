@@ -110,7 +110,70 @@ class AudioConsumer(AsyncWebsocketConsumer):
         print("Connection closed.")
 
 
-async def extract_features(wav_file):
+async def process_audio(data):
+    # Bellekte bir WAV dosyası oluştur
+    wav_buffer = io.BytesIO()
+
+    with wave.open(wav_buffer, 'wb') as wav_file:
+        wav_file.setnchannels(1)  # Mono
+        wav_file.setsampwidth(2)  # 16-bit PCM (2 byte per sample)
+        wav_file.setframerate(16000)  # 16 kHz örnekleme oranı
+        wav_file.writeframes(data)  # Ham sesi yaz
+
+    wav_buffer.seek(0)
+
+    features = extract_features(wav_buffer)
+
+    if isinstance(features, Exception):
+        print("Feature extraction error:", features)
+        return
+
+    columns = (
+            ['zero_crossing', 'centroid_mean', 'rolloff_mean', 'bandwidth_mean'] +
+            [f'contrast_mean_{i}' for i in range(7)] +
+            [f'contrast_std_{i}' for i in range(7)] +
+            [f'chroma_stft_mean_{i}' for i in range(12)] +
+            [f'chroma_stft_std_{i}' for i in range(12)] +
+            ['rms_mean', 'melspectrogram_mean', 'melspectrogram_std', 'flatness_mean'] +
+            [f'poly_mean_{i}' for i in range(2)] +
+            [f'mfcc_mean_{i}' for i in range(40)] +
+            [f'mfcc_std_{i}' for i in range(40)] +
+            ['energy']
+    )
+
+    df = pd.DataFrame([features], columns=columns)
+
+
+    # Özellikleri ayır
+    new_features = df.values
+
+    # Scaler'ı yükle
+    scaler = settings.SCALER
+
+    # Veriyi scaler ile ölçeklendir
+    new_features_scaled = scaler.transform(new_features)
+
+    # CNN modeline uygun shaping işlemi
+    new_features_scaled = new_features_scaled.reshape(new_features_scaled.shape[0], new_features_scaled.shape[1], 1)
+
+    # Eğitilmiş en iyi modeli yükle
+    best_model = settings.BEST_KERAS
+
+    # Tahminleri elde et
+    predictions = best_model.predict(new_features_scaled)
+
+    # Tahminleri orijinal etikete dönüştürmek için LabelEncoder'ı yükle
+    label_encoder = settings.LABEL_ENCODER
+
+    # Tahmin edilen sınıfları al
+    predicted_classes = np.argmax(predictions, axis=1)
+    predicted_labels = label_encoder.inverse_transform(predicted_classes)
+
+    # Sonuçları yazdır
+    print(predicted_labels)
+
+
+def extract_features(wav_file):
     try:
         audio, sample_rate = librosa.load(wav_file, sr=sr)
 
@@ -154,59 +217,3 @@ async def extract_features(wav_file):
 
     except Exception as e:
         return e
-
-
-async def process_audio(data):
-    with io.BytesIO(data) as wav_file:
-        wav_file.seek(0)
-
-    features = await extract_features(wav_file)
-
-    if isinstance(features, Exception):
-        print("Feature extraction error:", features)
-        return
-
-    columns = (
-            ['zero_crossing', 'centroid_mean', 'rolloff_mean', 'bandwidth_mean'] +
-            [f'contrast_mean_{i}' for i in range(7)] +
-            [f'contrast_std_{i}' for i in range(7)] +
-            [f'chroma_stft_mean_{i}' for i in range(12)] +
-            [f'chroma_stft_std_{i}' for i in range(12)] +
-            ['rms_mean', 'melspectrogram_mean', 'melspectrogram_std', 'flatness_mean'] +
-            [f'poly_mean_{i}' for i in range(2)] +
-            [f'mfcc_mean_{i}' for i in range(40)] +
-            [f'mfcc_std_{i}' for i in range(40)] +
-            ['energy']
-    )
-
-    df = pd.DataFrame([features], columns=columns)
-
-
-    # Özellikleri ayır
-    new_features = df.values
-
-    # Scaler'ı yükle
-    scaler = settings.SCALER
-
-    # Veriyi scaler ile ölçeklendir
-    new_features_scaled = scaler.transform(new_features)
-
-    # CNN modeline uygun shaping işlemi
-    new_features_scaled = new_features_scaled.reshape(new_features_scaled.shape[0], new_features_scaled.shape[1], 1)
-
-    # Eğitilmiş en iyi modeli yükle
-    best_model = settings.BEST_KERAS
-
-    # Tahminleri elde et
-    predictions = best_model.predict(new_features_scaled)
-
-    # Tahminleri orijinal etikete dönüştürmek için LabelEncoder'ı yükle
-    with open('label_encoder.pkl', 'rb') as file:
-        label_encoder = pickle.load(file)
-
-    # Tahmin edilen sınıfları al
-    predicted_classes = np.argmax(predictions, axis=1)
-    predicted_labels = label_encoder.inverse_transform(predicted_classes)
-
-    # Sonuçları yazdır
-    print(predicted_labels)
