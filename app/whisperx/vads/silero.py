@@ -6,8 +6,8 @@ from typing import Union
 
 import torch
 
-from app.whisperx.diarize import Segment as SegmentX
-from app.whisperx.vads.vad import Vad
+from ..diarize import Segment as SegmentX
+from .vad import Vad
 
 AudioFile = Union[Text, Path, IOBase, Mapping]
 
