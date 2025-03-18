@@ -1,10 +1,23 @@
-# Voice Diarization Yeni Yaklaşım
+# Voice Recognition With Django Channels
 
-Önceki projemde frontend kısmında ses kaydı bitmeden sesi işlemeye başlayamıyordum. Bu durum ciddi miktarda zaman kaybına sebep oluyordu. Bu duruma çözüm olarak websocket kullanarak uygulamadan tamamen bağımsız dosya gönderim yapısı tasarladım.
-
-## Django Websocket Ve ASGI(Asynchronous Server Gateway Interface)
-
-Frontend kısmında kayıt başlat butonuna tıklandığı anda yapılan şey halihazırda bağlantı bekleyen django websockete bağlanmak."record.js" kütüphanesi ile kaydettiğim veri akışını belli aralıklarla bu bağlantı üzerinden django ASGI server'a gönderiyorum. ASGI server ise gelen ses bytelarından header ve data kısımlarını ayırıp data kısmını bir buffer a kaydediyor. Ardından gerekli işlemleri yapıp sesi istenen formatta meeting_id ve segmnet_id değerlerine göre bir dosyaya yazıyor.
+## Anlık Veri Aktarımı Ve ASGI(Asynchronous Server Gateway Interface)
+Frontend kısmında kayıt başlat butonuna tıklandığında, javascript bağlantı bekleyen django websockete bağlanır. Bağlantı sağlandıktan sonra kaydedilen ses akışı belli aralıklarla "recorder.js" kütüphanesi ile wav formatına dönüştürülüp backend tarafındaki ASGI serverın consumerına iletilir. Consumer gelen ses bytelarının header kısmını atıp data kısmını dinamik olarak işleme alır.
 
 ![1473343845-django-wsgi](https://github.com/user-attachments/assets/9b6afe2e-0d53-4c18-a6f0-db183a19a7ad)
+
+## Segmentasyon
+Gelen verinin sokulduğu ilk işlem segmentasyondur. "webrtcvad" kütüphanesi aracılığıyla ses verisinin sessiz kısımları tespit edilip bu kısımlara göre veri birleştirilir ya da kesilerek segmentler oluşturulur. Ardından bu segmentlere bir "segment_id" değeri atanarak işleme alınırlar.
+
+
+## Transcription
+Transcription işlemi için açık kaynaklı whisperx modelini projeme entegre ettim. Model üzerinde ince ayar yapabilmek için whisperx kütüphanesi yerine doğrudan modelin kaynak kodunu kullandım. 
+Whisperx çalıştırdığım ortam özellikleri şu şekilde:
+  - Nvidia rtx 3050ti
+  - Driver: 550.120
+  - Cuda: 12.4
+  - Pytorch 2.5.0
+
+## Konuşmacı Ve Duygu Analizi
+Son olarak segmentleri, geliştirdiğimiz derin öğrenme modellerine göndererek kalan analizleri yapıp çıktıları raporluyorum.
+
 
