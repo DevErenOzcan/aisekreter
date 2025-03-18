@@ -5,7 +5,7 @@ Frontend kısmında kayıt başlat butonuna tıklandığında, javascript bağla
 
 ![1473343845-django-wsgi](https://github.com/user-attachments/assets/9b6afe2e-0d53-4c18-a6f0-db183a19a7ad)
 
-## Segmentasyon
+## Segmentation
 Gelen verinin sokulduğu ilk işlem segmentasyondur. "webrtcvad" kütüphanesi aracılığıyla ses verisinin sessiz kısımları tespit edilip bu kısımlara göre veri birleştirilir ya da kesilerek segmentler oluşturulur. Ardından bu segmentlere bir "segment_id" değeri atanarak işleme alınırlar.
 
 
