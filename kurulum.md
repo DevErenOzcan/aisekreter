@@ -1,11 +1,11 @@
 # Projenin kurulumu için yapılması gerekenler:
 ### Environment oluştur:
     # virtual env i kur (ubuntu):
-    python3.12 -m venv .venv
+    python3.10 -m venv .venv
     source .venv/bin/activate
 
     # virtual env i kur (windows):
-    python3.12 -m venv .venv
+    python3.10 -m venv .venv
     .venv\Scripts\activate
 
 ### Gerekli paketleri indir:
