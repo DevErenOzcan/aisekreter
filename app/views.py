@@ -1,14 +1,10 @@
 import os
 from time import sleep
-import librosa
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 from app.models import Meeting
-from django.conf import settings
 import re
-import io
-from pydub import AudioSegment
 
 
 def home(request):
