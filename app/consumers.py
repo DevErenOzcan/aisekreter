@@ -2,6 +2,7 @@ import os
 import io
 from channels.generic.websocket import AsyncWebsocketConsumer
 from django.conf import settings
+from asgiref.sync import sync_to_async
 
 import librosa
 import numpy as np
@@ -10,7 +11,6 @@ import wave
 import webrtcvad
 
 from app.whisperx.audio import load_audio
-
 
 
 # VAD nesnesini oluşturup modunu ayarlıyorum
@@ -27,8 +27,7 @@ class AudioConsumer(AsyncWebsocketConsumer):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.meeting_id = None
-        self.segment_id = None
-        self.segment_count = 0
+        self.segment_obj = None
         self.buffer = bytearray()
         self.current_segment = bytearray()
         self.is_speech_now = False
@@ -66,10 +65,14 @@ class AudioConsumer(AsyncWebsocketConsumer):
                                 not_speech_buffer = self.current_segment[-int(not_speech_len / 2):]
                                 self.current_segment = self.current_segment[:-int(not_speech_len / 2)]
 
-                                file_path = f"meetings/meet_{self.meeting_id}/segment_{self.segment_count}.wav"
-                                await self.save_audio(file_path, self.current_segment)
-                                self.segment_id = self.segment_count
-                                self.segment_count += 1
+                                from .models import Segments
+                                self.segment_obj = await Segments.objects.acreate(Meating_id=self.meeting_id)
+                                print(type(self.segment_obj))
+                                print(self.segment_obj.id)
+
+                                file_path = f"meetings/meet_{self.meeting_id}/segment_{self.segment_obj.id}.wav"
+                                self.segment_obj.path = file_path
+                                await save_audio(file_path, self.current_segment)
 
                                 print("-" * 100)
                                 print(f"new segment saved: {len(self.current_segment) / (sr * 2)} sn")
@@ -88,21 +91,9 @@ class AudioConsumer(AsyncWebsocketConsumer):
                 self.is_speech_now = is_speech
                 self.current_segment += frame_data
 
-
-    async def save_audio(self, filename, data):
-        directory = os.path.dirname(filename)
-        if directory and not os.path.exists(directory):
-            os.makedirs(directory, exist_ok=True)
-
-        with wave.open(filename, "wb") as wav_file:
-            wav_file.setnchannels(1)
-            wav_file.setsampwidth(2)
-            wav_file.setframerate(48000)
-            wav_file.writeframes(data)
-
     async def disconnect(self, close_code):
-        file_path = f"meetings/meet_{self.meeting_id}/segment_{self.segment_count}.wav"
-        await self.save_audio(file_path, self.current_segment)
+        # file_path = f"meetings/meet_{self.meeting_id}/segment_{self.segment_count}.wav"
+        # await self.save_audio(file_path, self.current_segment)
 
         print("-" * 100)
         print(f"new segment saved: {len(self.current_segment) / (sr * 2)} sn")
@@ -121,7 +112,7 @@ class AudioConsumer(AsyncWebsocketConsumer):
 
         wav_buffer.seek(0)
 
-        await transcription(f"meetings/meet_{self.meeting_id}/segment_{self.segment_id}.wav")
+        await self.transcription()
 
         features = extract_features(wav_buffer)
 
@@ -173,6 +164,30 @@ class AudioConsumer(AsyncWebsocketConsumer):
         # Sonuçları yazdır
         print(predicted_labels)
 
+        await save_segment_obj(self.segment_obj)
+
+
+    async def transcription(self):
+        try:
+            audio = load_audio(str(self.segment_obj.path))
+            result = settings.TRANSCRIBE_MODEL.transcribe(audio, batch_size=16)
+            self.segment_obj.text = result["segments"][0]["text"]
+            print(result["segments"][0]["text"])
+        except Exception as e:
+            print(f"Transcription error: {e}")
+
+
+async def save_audio(filename, data):
+    directory = os.path.dirname(filename)
+    if directory and not os.path.exists(directory):
+        os.makedirs(directory, exist_ok=True)
+
+    with wave.open(filename, "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(48000)
+        wav_file.writeframes(data)
+
 
 def extract_features(wav_file):
     try:
@@ -220,12 +235,13 @@ def extract_features(wav_file):
         return e
 
 
-async def transcription(file):
+@sync_to_async
+def save_segment_obj(segment_obj):
     try:
-        audio = load_audio(file)
-        result = settings.TRANSCRIBE_MODEL.transcribe(audio, batch_size=16)
-        print(result)
-        return result
+        from .models import Segments
+        segment_obj.path = segment_obj.path
+        segment_obj.text = segment_obj.text
+        segment_obj.save()
+        print(f"{segment_obj.id} id'li segment kaydedildi.")
     except Exception as e:
-        print(e)
-        return e
+        print(f"Segment save error: {e}")

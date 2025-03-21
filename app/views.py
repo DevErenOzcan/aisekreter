@@ -3,7 +3,7 @@ from time import sleep
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
-from app.models import Meeting
+from app.models import Meetings
 import re
 
 
@@ -14,7 +14,7 @@ def home(request):
 def start_meeting(request):
     if request.method == "POST":
         try:
-            meeting = Meeting.objects.create()
+            meeting = Meetings.objects.create()
             return JsonResponse({'success': True, 'id': meeting.id})
         except Exception as e:
             return JsonResponse({'success': False, 'error': str(e)})
@@ -27,14 +27,14 @@ def start_processes(request, id):
     if request.method == "POST":
         try:
             sleep(10)
-            while Meeting.objects.get(id=id).is_alive:
+            while Meetings.objects.get(id=id).is_alive:
                 sleep(10)
                 directory = f"meetings/{id}/"
                 files = os.listdir(directory)
 
                 for file in files:
                     file_path = os.path.join(directory, file)
-                    meeting = Meeting.objects.get(id=id)
+                    meeting = Meetings.objects.get(id=id)
                     file_number = int(re.search(r'/(\d+)\.wav$', file_path).group(1))
                     if os.path.isfile(file_path) and file_number > meeting.segment_count:
                         meeting.segment_count += 1
@@ -53,7 +53,7 @@ def start_processes(request, id):
 @csrf_exempt
 def stop_meeting(request, id):
     if request.method == "POST":
-        meeting_object = Meeting.objects.get(id=id)
+        meeting_object = Meetings.objects.get(id=id)
         meeting_object.is_alive = False
         meeting_object.save()
         return JsonResponse({'success': True, 'message': "toplantı bitti"})
