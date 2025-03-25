@@ -1,5 +1,7 @@
+import asyncio
 import os
 import io
+
 from channels.generic.websocket import AsyncWebsocketConsumer
 from django.conf import settings
 from asgiref.sync import sync_to_async
@@ -27,7 +29,6 @@ class AudioConsumer(AsyncWebsocketConsumer):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.meeting_id = None
-        self.segment_obj = None
         self.buffer = bytearray()
         self.current_segment = bytearray()
         self.is_speech_now = False
@@ -66,18 +67,16 @@ class AudioConsumer(AsyncWebsocketConsumer):
                                 self.current_segment = self.current_segment[:-int(not_speech_len / 2)]
 
                                 from .models import Segments
-                                self.segment_obj = await Segments.objects.acreate(Meating_id=self.meeting_id)
-                                print(type(self.segment_obj))
-                                print(self.segment_obj.id)
+                                segment_obj = await Segments.objects.acreate(Meating_id=self.meeting_id)
 
-                                file_path = f"meetings/meet_{self.meeting_id}/segment_{self.segment_obj.id}.wav"
-                                self.segment_obj.path = file_path
+                                file_path = f"meetings/meet_{self.meeting_id}/segment_{segment_obj.id}.wav"
+                                segment_obj.path = file_path
                                 await save_audio(file_path, self.current_segment)
 
                                 print("-" * 100)
                                 print(f"new segment saved: {len(self.current_segment) / (sr * 2)} sn")
 
-                                await self.process_audio(self.current_segment)
+                                await process_audio(segment_obj, self.current_segment)
 
                                 # mevcut segmenti temizleyip yeni segmentin başına kalan yarısını ekliyorum. Böylece ses parçaları arasında kesinti olmuyor
                                 self.current_segment = bytearray()
@@ -100,81 +99,65 @@ class AudioConsumer(AsyncWebsocketConsumer):
         print("Connection closed.")
 
 
-    async def process_audio(self, data):
-        # Bellekte bir WAV dosyası oluştur
-        wav_buffer = io.BytesIO()
+async def process_audio(segment_obj, data):
+    # Bellekte bir WAV dosyası oluştur
+    wav_buffer = io.BytesIO()
 
-        with wave.open(wav_buffer, 'wb') as wav_file:
-            wav_file.setnchannels(1)  # Mono
-            wav_file.setsampwidth(2)  # 16-bit PCM (2 byte per sample)
-            wav_file.setframerate(16000)  # 16 kHz örnekleme oranı
-            wav_file.writeframes(data)  # Ham sesi yaz
+    with wave.open(wav_buffer, 'wb') as wav_file:
+        wav_file.setnchannels(1)  # Mono
+        wav_file.setsampwidth(2)  # 16-bit PCM (2 byte per sample)
+        wav_file.setframerate(16000)  # 16 kHz örnekleme oranı
+        wav_file.writeframes(data)  # Ham sesi yaz
 
-        wav_buffer.seek(0)
+    wav_buffer.seek(0)
 
-        await self.transcription()
+    # Transcription işlemini asenkron başlat
+    transcription_task = asyncio.create_task(transcription(str(segment_obj.path)))
 
-        features = extract_features(wav_buffer)
+    # Feature extraction işlemini çalıştır ve sonucu bekle
+    features = await extract_features(wav_buffer)
 
-        if isinstance(features, Exception):
-            print("Feature extraction error:", features)
-            return
+    if isinstance(features, Exception):
+        print("Feature extraction error:", features)
+        return
 
-        columns = (
-                ['zero_crossing', 'centroid_mean', 'rolloff_mean', 'bandwidth_mean'] +
-                [f'contrast_mean_{i}' for i in range(7)] +
-                [f'contrast_std_{i}' for i in range(7)] +
-                [f'chroma_stft_mean_{i}' for i in range(12)] +
-                [f'chroma_stft_std_{i}' for i in range(12)] +
-                ['rms_mean', 'melspectrogram_mean', 'melspectrogram_std', 'flatness_mean'] +
-                [f'poly_mean_{i}' for i in range(2)] +
-                [f'mfcc_mean_{i}' for i in range(40)] +
-                [f'mfcc_std_{i}' for i in range(40)] +
-                ['energy']
-        )
+    columns = (
+        ['zero_crossing', 'centroid_mean', 'rolloff_mean', 'bandwidth_mean'] +
+        [f'contrast_mean_{i}' for i in range(7)] +
+        [f'contrast_std_{i}' for i in range(7)] +
+        [f'chroma_stft_mean_{i}' for i in range(12)] +
+        [f'chroma_stft_std_{i}' for i in range(12)] +
+        ['rms_mean', 'melspectrogram_mean', 'melspectrogram_std', 'flatness_mean'] +
+        [f'poly_mean_{i}' for i in range(2)] +
+        [f'mfcc_mean_{i}' for i in range(40)] +
+        [f'mfcc_std_{i}' for i in range(40)] +
+        ['energy']
+    )
 
-        df = pd.DataFrame([features], columns=columns)
+    df = pd.DataFrame([features], columns=columns)
 
+    # Ses duygu analizi işlemini asenkron başlat
+    audio_sentiment_task = asyncio.create_task(audio_sentiment_analysis(df))
 
-        # Özellikleri ayır
-        new_features = df.values
+    # Transcription işleminin bitmesini bekle
+    text = await transcription_task
+    # Ses duygu analizi işleminin bitmesini bekle
+    audio_sentiment = await audio_sentiment_task
 
-        # Scaler'ı yükle
-        scaler = settings.SCALER
+    if isinstance(text, Exception):
+        print("Transcription error:", text)
+        return
 
-        # Veriyi scaler ile ölçeklendir
-        new_features_scaled = scaler.transform(new_features)
+    if isinstance(audio_sentiment, Exception):
+        print("Audio sentiment analysis error:", audio_sentiment)
+        return
 
-        # CNN modeline uygun shaping işlemi
-        new_features_scaled = new_features_scaled.reshape(new_features_scaled.shape[0], new_features_scaled.shape[1], 1)
+    print(text)
+    print(audio_sentiment)
 
-        # Eğitilmiş en iyi modeli yükle
-        best_model = settings.BEST_KERAS
-
-        # Tahminleri elde et
-        predictions = best_model.predict(new_features_scaled)
-
-        # Tahminleri orijinal etikete dönüştürmek için LabelEncoder'ı yükle
-        label_encoder = settings.LABEL_ENCODER
-
-        # Tahmin edilen sınıfları al
-        predicted_classes = np.argmax(predictions, axis=1)
-        predicted_labels = label_encoder.inverse_transform(predicted_classes)
-
-        # Sonuçları yazdır
-        print(predicted_labels)
-
-        await save_segment_obj(self.segment_obj)
-
-
-    async def transcription(self):
-        try:
-            audio = load_audio(str(self.segment_obj.path))
-            result = settings.TRANSCRIBE_MODEL.transcribe(audio, batch_size=16)
-            self.segment_obj.text = result["segments"][0]["text"]
-            print(result["segments"][0]["text"])
-        except Exception as e:
-            print(f"Transcription error: {e}")
+    # Segment objesine metni ekleyip kaydet
+    segment_obj.text = text
+    await save_segment_obj(segment_obj)
 
 
 async def save_audio(filename, data):
@@ -189,7 +172,7 @@ async def save_audio(filename, data):
         wav_file.writeframes(data)
 
 
-def extract_features(wav_file):
+async def extract_features(wav_file):
     try:
         audio, sample_rate = librosa.load(wav_file, sr=sr)
 
@@ -231,6 +214,39 @@ def extract_features(wav_file):
 
         return features
 
+    except Exception as e:
+        return e
+
+async def transcription(path):
+    try:
+        audio = load_audio(path)
+        result = settings.TRANSCRIBE_MODEL.transcribe(audio, batch_size=16)
+        return result["segments"][0]["text"]
+    except Exception as e:
+        return e
+
+async def audio_sentiment_analysis(df):
+    try:
+        # Özellikleri ayır
+        new_features = df.values
+        # Scaler'ı yükle
+        scaler = settings.SCALER
+        # Veriyi scaler ile ölçeklendir
+        new_features_scaled = scaler.transform(new_features)
+        # CNN modeline uygun shaping işlemi
+        new_features_scaled = new_features_scaled.reshape(new_features_scaled.shape[0], new_features_scaled.shape[1], 1)
+        # Eğitilmiş en iyi modeli yükle
+        best_model = settings.BEST_KERAS
+        # Tahminleri elde et
+        predictions = best_model.predict(new_features_scaled)
+        # Tahminleri orijinal etikete dönüştürmek için LabelEncoder'ı yükle
+        label_encoder = settings.LABEL_ENCODER
+        # Tahmin edilen sınıfları al
+        predicted_classes = np.argmax(predictions, axis=1)
+        predicted_labels = label_encoder.inverse_transform(predicted_classes)
+        # Sonuçları yazdır
+        print(predicted_labels)
+        return predicted_labels
     except Exception as e:
         return e
 

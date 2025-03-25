@@ -14,7 +14,7 @@ application = ProtocolTypeRouter({
 
 # whisperx modelleri
 from app.whisperx.asr import load_model
-settings.TRANSCRIBE_MODEL = load_model("medium", "cuda", compute_type="float16")
+settings.TRANSCRIBE_MODEL = load_model("large", "cuda", compute_type="float16")
 
 
 # oğuzhan ın modelleri
