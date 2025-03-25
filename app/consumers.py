@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import io
 
@@ -74,7 +75,8 @@ class AudioConsumer(AsyncWebsocketConsumer):
                                 print("-" * 100)
                                 print(f"new segment saved: {len(self.current_segment) / (sr * 2)} sn")
 
-                                await process_audio(self.segment_obj, self.current_segment)
+                                result = await process_audio(self.segment_obj, self.current_segment)
+                                await self.send(json.dumps(result))
 
                                 # mevcut segmenti temizleyip yeni segmentin başına kalan yarısını ekliyorum. Böylece ses parçaları arasında kesinti olmuyor
                                 self.current_segment = bytearray()
@@ -150,12 +152,13 @@ async def process_audio(segment_obj, data):
         print("Audio sentiment analysis error:", audio_sentiment)
         return
 
-    print(text)
-    print(audio_sentiment)
+    print(f"transcription: {text}")
+    print(f"Audio Sentiment: {audio_sentiment[0]}")
 
-    # Segment objesine metni ekleyip kaydet
     segment_obj.text = text
     await save_segment_obj(segment_obj)
+
+    return {"text": text, "audio_sentiment": audio_sentiment[0]}
 
 
 async def save_audio(filename, data):

@@ -36,6 +36,10 @@ document.addEventListener("DOMContentLoaded", function () {
                 ws.onerror = function (error) {
                     console.error("WebSocket hatası:", error);
                 };
+                ws.onmessage = function (event) {
+                    const data = JSON.parse(event.data);
+                    console.log(data)
+                };
 
                 // Kayıt verilerini gönder
                 intervalId = setInterval(() => {
