@@ -28,14 +28,15 @@ frame_size = int(sr * frame_duration / 1000)
 class AudioConsumer(AsyncWebsocketConsumer):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.meeting_id = None
+        self.segment_obj = None
         self.buffer = bytearray()
         self.current_segment = bytearray()
         self.is_speech_now = False
         self.not_speech_count = 0
 
     async def connect(self):
-        self.meeting_id = self.scope['url_route']['kwargs']['meeting_id']
+        from .models import Segments
+        self.segment_obj = await Segments.objects.acreate()
         await self.accept()
 
     async def receive(self, text_data=None, bytes_data=None):
@@ -66,17 +67,14 @@ class AudioConsumer(AsyncWebsocketConsumer):
                                 not_speech_buffer = self.current_segment[-int(not_speech_len / 2):]
                                 self.current_segment = self.current_segment[:-int(not_speech_len / 2)]
 
-                                from .models import Segments
-                                segment_obj = await Segments.objects.acreate(Meating_id=self.meeting_id)
-
-                                file_path = f"meetings/meet_{self.meeting_id}/segment_{segment_obj.id}.wav"
-                                segment_obj.path = file_path
+                                file_path = f"meetings/meet_{self.segment_obj.id}/segment_{self.segment_obj.id}.wav"
+                                self.segment_obj.path = file_path
                                 await save_audio(file_path, self.current_segment)
 
                                 print("-" * 100)
                                 print(f"new segment saved: {len(self.current_segment) / (sr * 2)} sn")
 
-                                await process_audio(segment_obj, self.current_segment)
+                                await process_audio(self.segment_obj, self.current_segment)
 
                                 # mevcut segmenti temizleyip yeni segmentin başına kalan yarısını ekliyorum. Böylece ses parçaları arasında kesinti olmuyor
                                 self.current_segment = bytearray()
