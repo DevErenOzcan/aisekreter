@@ -29,15 +29,15 @@ frame_size = int(sr * frame_duration / 1000)
 class AudioConsumer(AsyncWebsocketConsumer):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.segment_obj = None
+        self.meeting_obj = None
         self.buffer = bytearray()
         self.current_segment = bytearray()
         self.is_speech_now = False
         self.not_speech_count = 0
 
     async def connect(self):
-        from .models import Segments
-        self.segment_obj = await Segments.objects.acreate()
+        from .models import Meetings
+        self.meeting_obj = await Meetings.objects.acreate()
         await self.accept()
 
     async def receive(self, text_data=None, bytes_data=None):
@@ -62,20 +62,23 @@ class AudioConsumer(AsyncWebsocketConsumer):
                         # sessizlik 24 frame den fazlaysa ve segment 3 sn den uzunsa mevcut segmenti bölüyorum
                         if len(self.current_segment) > sr * 6:
                             if self.not_speech_count > 10:
+                                from .models import Segments
+                                segment_obj = await Segments.objects.acreate()
+
                                 # son segmentin son kısmındaki sessizliğin ilk yarısını o segmentte bırakıp diğer yarısını yeni segmente ekleyeceğim
                                 # böylelikle sesi tam olarak sessizliğin ortasından bölmüş oluyorum.
                                 not_speech_len = self.not_speech_count * frame_size
                                 not_speech_buffer = self.current_segment[-int(not_speech_len / 2):]
                                 self.current_segment = self.current_segment[:-int(not_speech_len / 2)]
 
-                                file_path = f"meetings/meet_{self.segment_obj.id}/segment_{self.segment_obj.id}.wav"
-                                self.segment_obj.path = file_path
+                                file_path = f"meetings/meet_{self.meeting_obj.id}/segment_{segment_obj.id}.wav"
+                                segment_obj.path = file_path
                                 await save_audio(file_path, self.current_segment)
 
                                 print("-" * 100)
                                 print(f"new segment saved: {len(self.current_segment) / (sr * 2)} sn")
 
-                                result = await process_audio(self.segment_obj, self.current_segment)
+                                result = await process_audio(segment_obj, self.current_segment)
                                 await self.send(json.dumps(result))
 
                                 # mevcut segmenti temizleyip yeni segmentin başına kalan yarısını ekliyorum. Böylece ses parçaları arasında kesinti olmuyor
@@ -158,7 +161,7 @@ async def process_audio(segment_obj, data):
     segment_obj.text = text
     await save_segment_obj(segment_obj)
 
-    return {"text": text, "audio_sentiment": audio_sentiment[0]}
+    return {"id":segment_obj.id, "text": text, "audio_sentiment": audio_sentiment[0]}
 
 
 async def save_audio(filename, data):

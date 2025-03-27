@@ -1,14 +1,12 @@
 document.addEventListener("DOMContentLoaded", function () {
     const recordToggle = document.getElementById("record-toggle");
     const statusMessage = document.getElementById("status-message");
-    const loadingSpinner = document.getElementById("loading-spinner");
 
     let isRecording = false;
     let audioContext = null;
     let recorder = null;
     let intervalId;
 
-    // Kayıt butonuna tıklama olayını dinle
     recordToggle.addEventListener("click", function () {
         if (isRecording) {
             stopMeeting();
@@ -31,23 +29,23 @@ document.addEventListener("DOMContentLoaded", function () {
 
                 ws.onopen = function () {
                     console.log("WebSocket bağlantısı açıldı.");
-                    recorder.record(); // Kayıt başlat
+                    recorder.record();
                 };
                 ws.onerror = function (error) {
                     console.error("WebSocket hatası:", error);
                 };
                 ws.onmessage = function (event) {
                     const data = JSON.parse(event.data);
-                    console.log(data)
+                    console.log(data);
+                    displayResult(data);
                 };
 
-                // Kayıt verilerini gönder
                 intervalId = setInterval(() => {
                     recorder.exportWAV(blob => {
                         if (!isRecording) {
-                            clearInterval(intervalId); // Kayıt durduğunda interval'i durdur
-                            ws.close()
-                            return; // Kayıt durduysa daha fazla işlem yapma
+                            clearInterval(intervalId);
+                            ws.close();
+                            return;
                         }
                         if (ws.readyState === WebSocket.OPEN) {
                             ws.send(blob);
@@ -63,26 +61,61 @@ document.addEventListener("DOMContentLoaded", function () {
 
     function stopMeeting() {
         isRecording = false;
-        statusMessage.textContent = "Recording stopped. Processing audio...";
+        statusMessage.textContent = "Recording stopped";
         recorder.stop();
-        showLoadingSpinner();
     }
 
-    // Kayıt durumunu göster ve buton metnini güncelle
     function toggleRecordingState() {
         recordToggle.classList.toggle("recording");
         recordToggle.textContent = isRecording ? "Stop Recording" : "Start Recording";
     }
 
-    // Yükleme simgesini göster
-    function showLoadingSpinner() {
-        recordToggle.style.display = "none";
-        loadingSpinner.style.display = "block";
+    function displayResult(data) {
+        let outputDiv = document.getElementById("output");
+        let table = outputDiv.querySelector("table");
+
+        // Eğer tablo yoksa, oluştur ve başlık satırını ekle
+        if (!table) {
+            table = document.createElement("table");
+            table.style.width = "100%";
+            table.style.borderCollapse = "collapse";
+
+            // Tablo başlığını oluştur
+            let thead = document.createElement("thead");
+            let headerRow = document.createElement("tr");
+
+            ["ID", "Text", "Sentiment"].forEach(text => {
+                let th = document.createElement("th");
+                th.textContent = text;
+                th.style.border = "1px solid black";
+                th.style.padding = "8px";
+                th.style.textAlign = "left";
+                headerRow.appendChild(th);
+            });
+
+            thead.appendChild(headerRow);
+            table.appendChild(thead);
+
+            // Tablo gövdesini oluştur
+            let tbody = document.createElement("tbody");
+            table.appendChild(tbody);
+
+            outputDiv.appendChild(table);
+        }
+
+        // Yeni satırı oluştur
+        let tbody = table.querySelector("tbody");
+        let row = document.createElement("tr");
+
+        [data.id, data.text, data.audio_sentiment].forEach(text => {
+            let td = document.createElement("td");
+            td.textContent = text;
+            td.style.border = "1px solid black";
+            td.style.padding = "8px";
+            row.appendChild(td);
+        });
+
+        tbody.appendChild(row);
     }
 
-    // Yükleme simgesini gizle
-    function hideLoadingSpinner() {
-        loadingSpinner.style.display = "none";
-        recordToggle.style.display = "block";
-    }
 });
