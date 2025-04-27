@@ -231,8 +231,10 @@ async def transcription(path):
 
 async def audio_sentiment_analysis(df):
     try:
-        # Özellikleri ayır
-        new_features = df.values
+        # Selector'u yükle
+        selector = settings.SELECTOR
+        # Selector ile sadece seçilen özellikleri al
+        new_features = df[selector].values
         # Scaler'ı yükle
         scaler = settings.SCALER
         # Veriyi scaler ile ölçeklendir
